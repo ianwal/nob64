@@ -43,6 +43,7 @@ add_executable(nob64
     # joybus-pio
     joybus-pio/src/joybus.c
     joybus-pio/src/N64Console.cpp
+    joybus-pio/src/N64Controller.cpp
 )
 
 pico_generate_pio_header(nob64 ${CMAKE_CURRENT_LIST_DIR}/joybus-pio/src/joybus.pio)
@@ -56,8 +57,8 @@ pico_set_program_name(nob64 "nob64")
 pico_set_program_version(nob64 "0.1")
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(nob64 1)
-pico_enable_stdio_usb(nob64 0)
+pico_enable_stdio_uart(nob64 0)
+pico_enable_stdio_usb(nob64 1)
 
 # Add the standard library to the build
 target_link_libraries(nob64
