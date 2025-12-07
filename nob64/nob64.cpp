@@ -2,6 +2,7 @@
 #include "N64Controller.hpp"
 #include "n64_definitions.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -117,14 +118,16 @@ int main(void)
 // If XA == XB then the input is positive, otherwise it's negative.
 // The stick value is relative, so the sum of all movements is the position of the stick.
 // Repeat for the Y axis.
-constexpr uint xa_pin = 123;
-constexpr uint xb_pin = 123;
-constexpr uint ya_pin = 123;
-constexpr uint yb_pin = 123;
+//
+// These pins can be on any GPIO in.
+constexpr uint xa_pin = 0;
+constexpr uint xb_pin = 3;
+constexpr uint ya_pin = 4;
+constexpr uint yb_pin = 5;
 
 // TODO: alignas(64) these to prevent false-sharing?
-std::atomic<std::int8_t> analog_stick_x{ 0U };
-std::atomic<std::int8_t> analog_stick_y{ 0U };
+alignas(64) std::atomic<std::int16_t> analog_stick_x{ 0U };
+alignas(64) std::atomic<std::int16_t> analog_stick_y{ 0U };
 
 /// @brief Reset the analog sticks back to the center.
 void reset_analog_stick_calibration()
@@ -193,15 +196,27 @@ int main(void)
     gpio_set_irq_enabled(ya_pin, gpio_irq_edge_change, true);
     irq_set_enabled(IO_IRQ_BANK0, true);
 
-    N64Console console{ joybus_pin, pio0 };
+    // N64Console console{ joybus_pin, pio0 };
 
+    std::int8_t stick_x_prev{ 100 };
+    std::int8_t stick_y_prev{ 100 };
     n64_report_t report = default_n64_report;
     while (true) {
         // TODO: Probably need to offload the analog stick ISR and button reading to another core to avoid disrupting joybus.
-        console.WaitForPoll();
-        report.stick_x = analog_stick_x.load();
-        report.stick_y = analog_stick_y.load();
-        console.SendReport(&report);
+        // console.WaitForPoll();
+        // Multiply each axis by 2 because I'm only interrupting on the A pins.
+        std::int16_t const stick_x = analog_stick_x.load() * 2;
+        std::int16_t const stick_y = analog_stick_y.load() * 2;
+        report.stick_x             = static_cast<std::uint8_t>(std::clamp(stick_x, std::int16_t{ std::numeric_limits<std::int8_t>::min() },
+                                                                          std::int16_t{ std::numeric_limits<std::int8_t>::max() }));
+        report.stick_y             = static_cast<std::uint8_t>(std::clamp(stick_x, std::int16_t{ std::numeric_limits<std::int8_t>::min() },
+                                                                          std::int16_t{ std::numeric_limits<std::int8_t>::max() }));
+        // console.SendReport(&report);
+        if ((stick_x_prev != stick_x) || (stick_y_prev != stick_y)) {
+            printf("X: %d Y: %d report x: %d report y: %d\n", (int) stick_x, (int) stick_y, report.stick_x, report.stick_y);
+        }
+        stick_x_prev = stick_x;
+        stick_y_prev = stick_y;
     }
 }
 
